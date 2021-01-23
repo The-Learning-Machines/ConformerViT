@@ -147,7 +147,7 @@ class ViT(nn.Module):
 
 
 class Conformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout, kernel_size=31, causal=False):
+    def __init__(self, dim, depth, heads, dim_head, dropout, kernel_size=31, causal=False):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth):
@@ -189,7 +189,7 @@ class ConformerViTForClassification(nn.Module):
         self.dropout = nn.Dropout(emb_dropout)
 
         self.transformer = Conformer(
-            dim, depth, heads, dim_head, mlp_dim, dropout, kernel_size, causal)
+            dim, depth, heads, dim_head, dropout, kernel_size, causal)
 
         self.pool = pool
         self.to_latent = nn.Identity()
@@ -221,7 +221,7 @@ class ConformerViTForClassification(nn.Module):
 
 
 class ConformerViTForImage2Seq(nn.Module):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, decoder_dim, output_seq_len, SOS_token, EOS_token, channels=3, dim_head=64, dropout=0., emb_dropout=0., kernel_size=31, causal=False):
+    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, decoder_dim, output_seq_len, SOS_token, EOS_token, channels=3, dim_head=64, dropout=0., emb_dropout=0., kernel_size=31, causal=False):
         super().__init__()
         assert image_size % patch_size == 0, 'Image dimensions must be divisible by the patch size.'
         num_patches = (image_size // patch_size) ** 2
@@ -236,7 +236,7 @@ class ConformerViTForImage2Seq(nn.Module):
         self.dropout = nn.Dropout(emb_dropout)
 
         self.transformer = Conformer(
-            dim, depth, heads, dim_head, mlp_dim, dropout, kernel_size, causal)
+            dim, depth, heads, dim_head, dropout, kernel_size, causal)
 
         self.output_seq_len = output_seq_len
         # self.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, dim))
@@ -291,7 +291,6 @@ if __name__ == "__main__":
         dim=320,
         depth=12,
         heads=8,
-        mlp_dim=1024,
         decoder_dim=640,
         output_seq_len=128,
         SOS_token=1,

@@ -15,7 +15,6 @@ model = ConformerViTForImage2Seq(
     dim=320,
     depth=12,
     heads=8,
-    mlp_dim=1024,
     decoder_dim=640,
     output_seq_len=128,
     SOS_token=1,
@@ -46,7 +45,6 @@ model = ConformerViTForClassification(
     dim=144,
     depth=12,
     heads=16,
-    mlp_dim=2048,
     dropout=0.1,
     emb_dropout=0.1
 )
