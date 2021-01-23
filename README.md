@@ -55,3 +55,7 @@ img = torch.randn(1, 3, 256, 256)
 
 preds = model(img)  # (1, 1000)
 ```
+
+#### Acknowledgement
+
+Code for Decoder `borrowed` from [here](https://github.com/wptoux/attention-ocr)
