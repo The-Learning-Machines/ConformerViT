@@ -29,7 +29,7 @@ model = ConformerViTForImage2Seq(
 inp = torch.randn(1, 1, 64, 256)
 target_seq = torch.randint(0, 150, (1, 128))
 pred = model(inp, target_seq=target_seq, teacher_forcing_ratio=0.5)
-print(pred.shape)
+print(pred.shape) # (1, 128, 150)
 ```
 
 ### Usage - Image Classification
