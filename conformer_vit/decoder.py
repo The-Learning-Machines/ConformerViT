@@ -79,7 +79,7 @@ class Decoder(nn.Module):
             return symbols
 
         if use_teacher_forcing:
-            for di in range(max_length):
+            for di in range(max_length+1):
                 decoder_input = inputs[:, di].unsqueeze(1)
 
                 decoder_output, decoder_hidden = self.forward_step(

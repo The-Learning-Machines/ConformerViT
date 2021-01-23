@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from torch import nn
 from conformer import ConformerConvModule
+from .decoder import Decoder
 
 MIN_NUM_PATCHES = 16
 
@@ -220,14 +221,12 @@ class ConformerViTForClassification(nn.Module):
 
 
 class ConformerViTForImage2Seq(nn.Module):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, output_seq_len, teacher_forcing_ratio=0.5, channels=3, dim_head=64, dropout=0., emb_dropout=0., kernel_size=31, causal=False):
+    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, mlp_dim, decoder_dim, output_seq_len, SOS_token, EOS_token, channels=3, dim_head=64, dropout=0., emb_dropout=0., kernel_size=31, causal=False):
         super().__init__()
         assert image_size % patch_size == 0, 'Image dimensions must be divisible by the patch size.'
         num_patches = (image_size // patch_size) ** 2
         patch_dim = channels * patch_size ** 2
         assert num_patches > MIN_NUM_PATCHES, f'your number of patches ({num_patches}) is way too small for attention to be effective (at least 16). Try decreasing your patch size'
-        assert pool in {
-            'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
 
         self.patch_size = patch_size
 
@@ -239,17 +238,12 @@ class ConformerViTForImage2Seq(nn.Module):
         self.transformer = Conformer(
             dim, depth, heads, dim_head, mlp_dim, dropout, kernel_size, causal)
 
-        self.pool = pool
-        self.to_latent = nn.Identity()
+        self.output_seq_len = output_seq_len
+        # self.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, dim))
+        self.decoder = Decoder(
+            num_classes, self.output_seq_len, dim, SOS_token, EOS_token)
 
-        self.mlp_head = nn.Sequential(
-            nn.LayerNorm(dim),
-            nn.Linear(dim, num_classes)
-        )
-
-        self.teacher_forcing_ratio = teacher_forcing_ratio
-
-    def forward(self, img, mask=None):
+    def forward(self, img, target_seq=None, teacher_forcing_ratio=0.5, mask=None):
         p = self.patch_size
 
         x = rearrange(
@@ -265,27 +259,51 @@ class ConformerViTForImage2Seq(nn.Module):
         x = self.transformer(x, mask)
 
         # print(x.shape)
-        x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-        x = self.to_latent(x)
-        return self.mlp_head(x)
+        x = x[:, :self.output_seq_len]
+        decoder_out, _ = self.decoder(target_seq, encoder_outputs=x,
+                                      teacher_forcing_ratio=teacher_forcing_ratio)
+        return decoder_out
 
 
 if __name__ == "__main__":
-    model = ConformerViTForClassification(
+    # model = ConformerViTForClassification(
+    #     image_size=256,
+    #     patch_size=16,
+    #     num_classes=1000,
+    #     dim=320,
+    #     depth=12,
+    #     heads=16,
+    #     mlp_dim=1024,
+    #     dropout=0.1,
+    #     emb_dropout=0.1
+    # )
+
+    # img = torch.randn(1, 3, 64, 256)
+    # # optional mask, designating which patch to attend to
+    # # mask = torch.ones(1, 8, 8).bool()
+
+    # preds = model(img)  # (1, 1000)
+    # print(preds.shape)
+    model = ConformerViTForImage2Seq(
         image_size=256,
-        patch_size=32,
-        num_classes=1000,
-        dim=144,
+        patch_size=16,
+        num_classes=150,
+        dim=320,
         depth=12,
-        heads=16,
-        mlp_dim=2048,
+        heads=8,
+        mlp_dim=1024,
+        decoder_dim=640,
+        output_seq_len=128,
+        SOS_token=1,
+        EOS_token=2,
+        channels=1,
         dropout=0.1,
-        emb_dropout=0.1
+        emb_dropout=0.1,
+        kernel_size=17,
+        causal=False
     )
 
-    img = torch.randn(1, 3, 256, 256)
-    # optional mask, designating which patch to attend to
-    # mask = torch.ones(1, 8, 8).bool()
-
-    preds = model(img)  # (1, 1000)
-    print(preds.shape)
+    inp = torch.randn(1, 1, 64, 256)
+    target_seq = torch.randint(0, 150, (1, 128))
+    pred = model(inp, target_seq=target_seq, teacher_forcing_ratio=0.5)
+    print(pred.shape)
