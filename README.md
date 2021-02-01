@@ -17,6 +17,7 @@ model = ConformerViTForImage2Seq(
     heads=8,
     decoder_dim=640,
     output_seq_len=128,
+    decoder_type="transformer",
     SOS_token=1,
     EOS_token=2,
     channels=1,

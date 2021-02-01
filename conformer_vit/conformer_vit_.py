@@ -4,7 +4,7 @@ from einops import rearrange, repeat
 from torch import nn
 from conformer import ConformerConvModule
 from .decoder import Decoder
-
+import x_transformers
 MIN_NUM_PATCHES = 16
 
 
@@ -221,8 +221,9 @@ class ConformerViTForClassification(nn.Module):
 
 
 class ConformerViTForImage2Seq(nn.Module):
-    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, decoder_dim, output_seq_len, SOS_token, EOS_token, channels=3, dim_head=64, dropout=0., emb_dropout=0., kernel_size=31, causal=False):
+    def __init__(self, *, image_size, patch_size, num_classes, dim, depth, heads, decoder_dim, output_seq_len, SOS_token, EOS_token, decoder_type="transformer", channels=3, dim_head=64, dropout=0., emb_dropout=0., kernel_size=31, causal=False):
         super().__init__()
+        assert(decoder_type in ["lstm", "transformer"])
         assert image_size % patch_size == 0, 'Image dimensions must be divisible by the patch size.'
         num_patches = (image_size // patch_size) ** 2
         patch_dim = channels * patch_size ** 2
@@ -240,8 +241,24 @@ class ConformerViTForImage2Seq(nn.Module):
 
         self.output_seq_len = output_seq_len
         # self.pos_embedding = nn.Parameter(torch.randn(1, num_patches + 1, dim))
-        self.decoder = Decoder(
-            num_classes, self.output_seq_len, dim, SOS_token, EOS_token)
+        if decoder_type == "lstm":
+            self.decoder = Decoder(
+                num_classes, self.output_seq_len, dim, SOS_token, EOS_token)
+        else:
+            self.decoder = x_transformers.Decoder(
+                depth=4,
+                heads=8,
+                use_rezero=True,
+                cross_attend=True,
+                dim=dim
+            )
+            self.mlp = nn.Sequential(
+                nn.LayerNorm(dim),
+                nn.Linear(dim, dim // 2),
+                nn.ELU(inplace=True),
+                nn.Linear(dim // 2, num_classes),
+            )
+        self.decoder_type = decoder_type
 
     def forward(self, img, target_seq=None, teacher_forcing_ratio=0.5, mask=None):
         p = self.patch_size
@@ -260,8 +277,12 @@ class ConformerViTForImage2Seq(nn.Module):
 
         # print(x.shape)
         x = x[:, :self.output_seq_len]
-        decoder_out, _ = self.decoder(target_seq, encoder_outputs=x,
-                                      teacher_forcing_ratio=teacher_forcing_ratio)
+        if self.decoder_type == "lstm":
+            decoder_out, _ = self.decoder(target_seq, encoder_outputs=x,
+                                          teacher_forcing_ratio=teacher_forcing_ratio)
+        else:
+            decoder_out = self.decoder(x)[:, 1:self.output_seq_len + 1, :]
+            decoder_out = self.mlp(decoder_out)
         return decoder_out
 
 
@@ -299,7 +320,8 @@ if __name__ == "__main__":
         dropout=0.1,
         emb_dropout=0.1,
         kernel_size=17,
-        causal=False
+        causal=False,
+        decoder_type='transformer'
     )
 
     inp = torch.randn(1, 1, 64, 256)
